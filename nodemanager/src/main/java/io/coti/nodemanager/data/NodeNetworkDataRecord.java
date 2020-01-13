@@ -15,7 +15,6 @@ import java.time.ZoneId;
 public class NodeNetworkDataRecord implements Serializable {
 
     private static final long serialVersionUID = 7814283160669885668L;
-
     private Hash hash;
     private Instant recordTime;
     private NetworkNodeStatus nodeStatus;
