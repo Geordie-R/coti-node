@@ -52,13 +52,12 @@ public class NodeManagementService implements INodeManagementService {
     private StakingService stakingService;
     @Autowired
     private NodeDayMaps nodeDayMaps;
-
-
+    @Autowired
+    private NetworkHistoryService networkHistoryService;
     @Value("${server.ip}")
     private String nodeManagerIp;
     @Value("${propagation.port}")
     private String propagationPort;
-
     private Map<Hash, Hash> lockNodeHistoryRecordHashMap = new ConcurrentHashMap<>();
 
     @Override
@@ -126,26 +125,26 @@ public class NodeManagementService implements INodeManagementService {
 
     private void addNodeHistoryInitNewNode(NetworkNodeData networkNodeData, NetworkNodeStatus nodeStatus,
                                            Hash nodeHash, Instant currentEventDateTime) {
-        NodeDayMapData nodeDayMapsByHash = new NodeDayMapData(nodeHash);
+        NodeDayMapData nodeDayMapData = new NodeDayMapData(nodeHash);
         LocalDate currentEventDate = currentEventDateTime.atZone(ZoneId.of("UTC")).toLocalDate();
-        Hash calculateNodeHistoryDataHash = nodeDayMapsByHash.calculateNodeHistoryDataHash(currentEventDate);
-        nodeDayMapsByHash.getNodeDaySet().add(currentEventDate);
-        NodeHistoryData newNodeHistoryByHash = addNodeHistoryPutNodeNetworkDataRecordForNewDate(currentEventDateTime, nodeStatus, networkNodeData, calculateNodeHistoryDataHash);
-        nodeHistory.put(newNodeHistoryByHash);
+        Hash calculateNodeHistoryDataHash = networkHistoryService.calculateNodeHistoryDataHash(nodeHash, currentEventDate);
+        nodeDayMapData.getNodeDaySet().add(currentEventDate);
+        NodeHistoryData nodeHistoryData = addNodeHistoryForNewDate(currentEventDateTime, nodeStatus, networkNodeData, calculateNodeHistoryDataHash);
+        nodeHistory.put(nodeHistoryData);
 
-        Hash nodeHistoryLastEntryHash = newNodeHistoryByHash.getNodeHistory().lastKey();
+        Hash nodeHistoryLastEntryHash = nodeHistoryData.getNodeNetworkDataRecordMap().lastKey();
         Pair<LocalDate, Hash> pair = Pair.of(currentEventDate, nodeHistoryLastEntryHash);
 
-        getNodeCurrentNetworkDataRecord(nodeDayMapsByHash).setStatusChainRef(pair);
-        nodeDayMaps.put(nodeDayMapsByHash);
+        getNodeCurrentNetworkDataRecord(nodeDayMapData).setStatusChainRef(pair);
+        nodeDayMaps.put(nodeDayMapData);
         log.debug("New node was inserted the db. node: {}", nodeHash);
     }
 
-    private NodeHistoryData addNodeHistoryPutNodeNetworkDataRecordForNewDate(Instant currentEventDateTime, NetworkNodeStatus nodeStatus, NetworkNodeData networkNodeData, Hash newEventDateCalculatedNodeDateHash) {
+    private NodeHistoryData addNodeHistoryForNewDate(Instant currentEventDateTime, NetworkNodeStatus nodeStatus, NetworkNodeData networkNodeData, Hash newEventDateCalculatedNodeDateHash) {
         NodeHistoryData newNodeHistoryByHash = new NodeHistoryData(newEventDateCalculatedNodeDateHash);
         NodeNetworkDataRecord newNodeNetworkDataRecord =
                 new NodeNetworkDataRecord(currentEventDateTime, nodeStatus, networkNodeData);
-        newNodeHistoryByHash.getNodeHistory().put(newNodeNetworkDataRecord.getHash(), newNodeNetworkDataRecord);
+        newNodeHistoryByHash.getNodeNetworkDataRecordMap().put(newNodeNetworkDataRecord.getHash(), newNodeNetworkDataRecord);
         return newNodeHistoryByHash;
     }
 
@@ -153,7 +152,7 @@ public class NodeManagementService implements INodeManagementService {
                                               NetworkNodeStatus nodeStatus, NetworkNodeData networkNodeData) {
         LocalDate currentEventDate = currentEventDateTime.atZone(ZoneId.of("UTC")).toLocalDate();
         Hash newEventDateCalculatedNodeDateHash = nodeDayMapsByHash.calculateNodeHistoryDataHash(currentEventDate);
-        NodeHistoryData newNodeHistoryByHash = addNodeHistoryPutNodeNetworkDataRecordForNewDate(currentEventDateTime, nodeStatus, networkNodeData, newEventDateCalculatedNodeDateHash);
+        NodeHistoryData newNodeHistoryByHash = addNodeHistoryForNewDate(currentEventDateTime, nodeStatus, networkNodeData, newEventDateCalculatedNodeDateHash);
         nodeHistory.put(newNodeHistoryByHash);
 
         addNodeHistoryUpdateNodeDayMap(nodeDayMapsByHash, nodeStatus, currentEventDate, newNodeHistoryByHash);
@@ -169,7 +168,7 @@ public class NodeManagementService implements INodeManagementService {
         if (isChainHead && isSameStatus) {
             LocalDate lastDateWithEvent = nodeDayMapsByHash.getNodeDaySet().last();
             NodeHistoryData nodeHistoryLastDate = nodeHistory.getByHash(nodeDayMapsByHash.calculateNodeHistoryDataHash(lastDateWithEvent));
-            LinkedMap<Hash, NodeNetworkDataRecord> lastDateWithEventsNodeHistory = nodeHistoryLastDate.getNodeHistory();
+            LinkedMap<Hash, NodeNetworkDataRecord> lastDateWithEventsNodeHistory = nodeHistoryLastDate.getNodeNetworkDataRecordMap();
             Hash previousNodeNetworkDataRecordHash = lastDateWithEventsNodeHistory.lastKey();
             pair = Pair.of(lastDateWithEvent, previousNodeNetworkDataRecordHash);
         } else {
@@ -178,7 +177,7 @@ public class NodeManagementService implements INodeManagementService {
         getNodeCurrentNetworkDataRecord(nodeDayMapsByHash).setStatusChainRef(pair);
         nodeDayMapsByHash.getNodeDaySet().add(currentEventDate);
         nodeDayMaps.put(nodeDayMapsByHash);
-        existingEventDateNodeHistoryData.getNodeHistory().get(existingEventDateNodeHistoryData.getNodeHistory().lastKey()).setStatusChainRef(pair);
+        existingEventDateNodeHistoryData.getNodeNetworkDataRecordMap().get(existingEventDateNodeHistoryData.getNodeNetworkDataRecordMap().lastKey()).setStatusChainRef(pair);
         nodeHistory.put(existingEventDateNodeHistoryData);
     }
 
@@ -191,12 +190,12 @@ public class NodeManagementService implements INodeManagementService {
     }
 
     protected NodeNetworkDataRecord getNodeNetworkDataRecordByChainRef(NodeDayMapData nodeDayMapsByHash, Pair<LocalDate, Hash> chainRef) {
-        return nodeHistory.getByHash(nodeDayMapsByHash.calculateNodeHistoryDataHash(chainRef.getLeft())).getNodeHistory().get(chainRef.getRight());
+        return nodeHistory.getByHash(nodeDayMapsByHash.calculateNodeHistoryDataHash(chainRef.getLeft())).getNodeNetworkDataRecordMap().get(chainRef.getRight());
     }
 
     private NodeNetworkDataRecord getNodeCurrentNetworkDataRecord(NodeDayMapData nodeDayMapsByHash) {
         NodeHistoryData nodeHistoryData = nodeHistory.getByHash(nodeDayMapsByHash.calculateNodeHistoryDataHash(nodeDayMapsByHash.getNodeDaySet().last()));
-        return nodeHistoryData.getNodeHistory().get(nodeHistoryData.getNodeHistory().lastKey());
+        return nodeHistoryData.getNodeNetworkDataRecordMap().get(nodeHistoryData.getNodeNetworkDataRecordMap().lastKey());
     }
 
     private NetworkNodeStatus getNodeCurrentStatus(NodeDayMapData nodeDayMapsByHash) {
@@ -210,7 +209,7 @@ public class NodeManagementService implements INodeManagementService {
         Hash existingEventDateCalculatedNodeDateHash = nodeDayMapsByHash.calculateNodeHistoryDataHash(nodeDayMapsByHash.getNodeDaySet().last());
         NodeHistoryData existingEventDateNodeHistoryData = nodeHistory.getByHash(existingEventDateCalculatedNodeDateHash);
         NodeNetworkDataRecord newNodeNetworkDataRecord = new NodeNetworkDataRecord(currentEventDateTime, nodeStatus, networkNodeData);
-        existingEventDateNodeHistoryData.getNodeHistory().put(newNodeNetworkDataRecord.getHash(), newNodeNetworkDataRecord);
+        existingEventDateNodeHistoryData.getNodeNetworkDataRecordMap().put(newNodeNetworkDataRecord.getHash(), newNodeNetworkDataRecord);
 
         addNodeHistoryUpdateNodeDayMap(nodeDayMapsByHash, nodeStatus, currentEventDate, existingEventDateNodeHistoryData);
     }
