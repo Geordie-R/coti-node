@@ -277,35 +277,37 @@ public class NetworkHistoryService implements INetworkHistoryService {
         NodeHistoryData lastDateWithEventNodeHistoryData = nodeHistory.getByHash(lastDateWithEventHash);
         LinkedMap<Hash, NodeNetworkDataRecord> lastDateWithEventNodeHistory = lastDateWithEventNodeHistoryData.getNodeNetworkDataRecordMap();
         NodeNetworkDataRecord lastRelevantNodeNetworkDataRecord;
-        Instant endInstant = null;
+        Instant endInstant;
         Instant startInstant = localDateToInstant(startDate);
         if (!lastDateWithEvent.isAfter(endDate)) {
             lastRelevantNodeNetworkDataRecord = lastDateWithEventNodeHistory.get(lastDateWithEventNodeHistory.lastKey());
             if (!lastRelevantNodeNetworkDataRecord.getNodeStatus().equals(NetworkNodeStatus.ACTIVE)) {
                 endInstant = lastRelevantNodeNetworkDataRecord.getRecordTime();
+            } else {
+                endInstant = LocalDate.now(ZoneId.of("UTC")).equals(endDate) ? Instant.now() : localDateToInstant(endDate.plusDays(1));
             }
         } else {
             lastRelevantNodeNetworkDataRecord = lastDateWithEventNodeHistory.get(lastDateWithEventNodeHistory.firstKey());
             endInstant = localDateToInstant(endDate.plusDays(1));
         }
         NodeNetworkDataRecord nodeNetworkDataRecordByChainRef = getNodeNetworkDataRecordByChainRef(lastRelevantNodeNetworkDataRecord);
+        if (nodeNetworkDataRecordByChainRef == null || !nodeNetworkDataRecordByChainRef.getNodeStatus().equals(NetworkNodeStatus.ACTIVE)) {
+            nodeNetworkDataRecordByChainRef = lastRelevantNodeNetworkDataRecord;
+        }
         if (nodeNetworkDataRecordByChainRef.getRecordTime().isAfter(startInstant)) {
             startInstant = nodeNetworkDataRecordByChainRef.getRecordTime();
         }
-        if (nodeNetworkDataRecordByChainRef.getNodeStatus().equals(NetworkNodeStatus.ACTIVE)) {
+        if (startInstant.isBefore(endInstant)) {
             activityUpTimeInSeconds += startInstant.until(endInstant, ChronoUnit.SECONDS);
-            lastRelevantNodeNetworkDataRecord = getNodeNetworkDataRecordByChainRef(nodeNetworkDataRecordByChainRef);
-        } else {
-            lastRelevantNodeNetworkDataRecord = nodeNetworkDataRecordByChainRef;
         }
+        lastRelevantNodeNetworkDataRecord = getNodeNetworkDataRecordByChainRef(nodeNetworkDataRecordByChainRef);
 
         while (startInstant != localDateToInstant(startDate) && lastRelevantNodeNetworkDataRecord != null) {
+            startInstant = localDateToInstant(startDate);
             endInstant = lastRelevantNodeNetworkDataRecord.getRecordTime();
             nodeNetworkDataRecordByChainRef = getNodeNetworkDataRecordByChainRef(lastRelevantNodeNetworkDataRecord);
             if (nodeNetworkDataRecordByChainRef.getRecordTime().isAfter(startInstant)) {
                 startInstant = nodeNetworkDataRecordByChainRef.getRecordTime();
-            } else {
-                startInstant = localDateToInstant(startDate);
             }
             activityUpTimeInSeconds += startInstant.until(endInstant, ChronoUnit.SECONDS);
             lastRelevantNodeNetworkDataRecord = getNodeNetworkDataRecordByChainRef(nodeNetworkDataRecordByChainRef);
