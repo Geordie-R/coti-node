@@ -9,7 +9,6 @@ import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneId;
 
 @Data
 public class NodeNetworkDataRecord implements Serializable {
@@ -29,7 +28,6 @@ public class NodeNetworkDataRecord implements Serializable {
         this.nodeStatus = nodeStatus;
         this.networkNodeData = networkNodeData;
         this.hash = calculateHash();
-        this.statusChainRef = Pair.of(recordTime.atZone(ZoneId.of("UTC")).toLocalDate(), this.hash);
     }
 
     private Hash calculateHash() {

@@ -293,8 +293,12 @@ public class NetworkHistoryService implements INetworkHistoryService {
         return activityUpTimeInSeconds;
     }
 
-    private NodeNetworkDataRecord getNodeNetworkDataRecordByChainRef(NodeNetworkDataRecord nodeNetworkDataRecord) {
-        Hash recordHash = nodeNetworkDataRecord.getStatusChainRef().getRight();
+    public NodeNetworkDataRecord getNodeNetworkDataRecordByChainRef(NodeNetworkDataRecord nodeNetworkDataRecord) {
+        Pair<LocalDate, Hash> chainRef = nodeNetworkDataRecord.getStatusChainRef();
+        if(chainRef == null) {
+            return null;
+        }
+        Hash recordHash = chainRef.getRight();
         return nodeHistory.getByHash(calculateNodeHistoryDataHash(nodeNetworkDataRecord)).getNodeNetworkDataRecordMap().get(recordHash);
     }
 
@@ -311,6 +315,10 @@ public class NetworkHistoryService implements INetworkHistoryService {
 
     private Instant localDateToInstant(LocalDate localDate) {
         return localDate.atStartOfDay().toInstant(ZoneOffset.UTC);
+    }
+
+    public NodeNetworkDataRecord getLastNodeNetworkDataRecord(NodeHistoryData nodeHistoryData) {
+        return nodeHistoryData.getNodeNetworkDataRecordMap().get(nodeHistoryData.getNodeNetworkDataRecordMap().lastKey());
     }
 
 }
